@@ -1,25 +1,59 @@
-name: CI
+name: Build unsigned IPA
 
 on:
-  # push:
-  #   branches: [ master ]
-
   workflow_dispatch:
+
+  push:
+    branches:
+      - master
+      - sg-keep-view-once
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   build:
-    runs-on: macos-13
+    name: Build device IPA (unsigned, ad-hoc)
+    runs-on: macos-26
+    timeout-minutes: 350
 
     steps:
-      - uses: actions/checkout@v2
+      - name: Checkout (with submodules, full history for build number)
+        uses: actions/checkout@v4
         with:
           submodules: 'recursive'
           fetch-depth: '0'
 
-      - name: Set active Xcode path
+      - name: Read required Xcode version
         run: |
-          XCODE_VERSION=$(cat versions.json | python3 -c 'import json,sys;obj=json.load(sys.stdin);print(obj["xcode"]);')
-          sudo xcode-select -s /Applications/Xcode_$XCODE_VERSION.app/Contents/Developer
+          REQUIRED_XCODE_VERSION=$(cat versions.json | python3 -c 'import json,sys;obj=json.load(sys.stdin);print(obj["xcode"]);')
+          echo "Required Xcode: $REQUIRED_XCODE_VERSION"
+          echo "REQUIRED_XCODE_VERSION=$REQUIRED_XCODE_VERSION" >> $GITHUB_ENV
+
+      - name: Install and select Xcode ${{ env.REQUIRED_XCODE_VERSION }}
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: ${{ env.REQUIRED_XCODE_VERSION }}
+
+      - name: Make sure the Metal toolchain is available
+        run: |
+          xcrun metal --version || true
+          xcodebuild -downloadMetalToolchain >/tmp/metal.log 2>&1 || true
+
+      - name: Free disk space
+        run: |
+          set -x
+          df -h /
+          SELECTED=$(xcode-select -p)
+          for x in /Applications/Xcode*.app; do
+            if [ "$x" != "$SELECTED" ]; then
+              sudo rm -rf "$x"
+            fi
+          done
+          sudo rm -rf "$HOME/Library/Android/sdk" /usr/local/lib/android 2>/dev/null || true
+          sudo rm -rf /opt/homebrew/Caskroom 2>/dev/null || true
+          df -h /
 
       - name: Create canonical source directory
         run: |
@@ -73,37 +107,17 @@ jobs:
           done
           zip -r "./$OUTPUT_PATH/Telegram.DSYMs.zip" build/DSYMs 1>/dev/null
 
-      - name: Create Release
-        id: create_release
-        uses: actions/create-release@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          tag_name: build-${{ env.BUILD_NUMBER }}
-          release_name: Telegram ${{ env.APP_VERSION }} (${{ env.BUILD_NUMBER }})
-          body: |
-            An unsigned build of Telegram for iOS ${{ env.APP_VERSION }} (${{ env.BUILD_NUMBER }})
-          draft: false
-          prerelease: false
+      - name: Copy artifacts back to workspace
+        run: |
+          set -x
+          mkdir -p build/artifacts
+          cp /Users/Shared/telegram-ios/build/artifacts/Telegram.ipa build/artifacts/
+          cp /Users/Shared/telegram-ios/build/artifacts/Telegram.DSYMs.zip build/artifacts/ || true
 
-      - name: Upload Release IPA
-        id: upload-release-ipa 
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Upload IPA artifact
+        uses: actions/upload-artifact@v4
         with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: /Users/Shared/telegram-ios/build/artifacts/Telegram.ipa
-          asset_name: Telegram.ipa
-          asset_content_type: application/zip
-
-      - name: Upload Release DSYM
-        id: upload-release-dsym 
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: /Users/Shared/telegram-ios/build/artifacts/Telegram.DSYMs.zip
-          asset_name: Telegram.DSYMs.zip
-          asset_content_type: application/zip
+          name: Swiftgram-${{ env.APP_VERSION }}-${{ env.BUILD_NUMBER }}-unsigned
+          path: build/artifacts/*
+          compression-level: 0
+          retention-days: 14
