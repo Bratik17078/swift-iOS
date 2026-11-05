@@ -110,6 +110,9 @@
 "Common.UpdateOS" = "iOS update required";
 "Common.KnowWhatYouDo" = "Please, change these settings only if you know what they do.";
 
+"Settings.KeepViewOnceMedia" = "Keep One-Time Media";
+"Settings.KeepViewOnceMedia.Notice" = "Open one-time photos, videos and voice messages as many times as you want. They are not marked as viewed for the sender and do not self-destruct after opening.";
+
 "Message.HoldToShowOrReport" = "Hold to Show or Report.";
 
 "Auth.AccountBackupReminder" = "Make sure you have a backup access method. Keep a SIM for SMS or an additional session logged in to avoid being locked out.";

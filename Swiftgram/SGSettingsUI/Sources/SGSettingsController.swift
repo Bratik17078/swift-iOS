@@ -107,6 +107,7 @@ private enum SGBoolSetting: String {
     case tabBarSearchEnabled
     case videoControlsInFooter
     case hideAccountInNotifications
+    case keepViewOnceMedia
 }
 
 private enum SGOneFromManySetting: String {
@@ -331,6 +332,8 @@ private func SGControllerEntries(presentationData: PresentationData, callListSet
     entries.append(.toggle(id: id.count, section: .other, settingName: .hidePhoneInSettings, value: SGSimpleSettings.shared.hidePhoneInSettings, text: i18n("Settings.HidePhoneInSettingsUI", lang), enabled: true))
     entries.append(.notice(id: id.count, section: .other, text: i18n("Settings.HidePhoneInSettingsUI.Notice", lang)))
     entries.append(.toggle(id: id.count, section: .other, settingName: .hideAccountInNotifications, value: SGSimpleSettings.shared.hideAccountInNotifications, text: i18n("Settings.HideAccountInNotifications", lang), enabled: true))
+    entries.append(.toggle(id: id.count, section: .other, settingName: .keepViewOnceMedia, value: SGSimpleSettings.shared.keepViewOnceMedia, text: i18n("Settings.KeepViewOnceMedia", lang), enabled: true))
+    entries.append(.notice(id: id.count, section: .other, text: i18n("Settings.KeepViewOnceMedia.Notice", lang)))
     
     return filterSGItemListUIEntrires(entries: entries, by: state.searchQuery)
 }
@@ -529,6 +532,8 @@ public func sgSettingsController(context: AccountContext/*, focusOnItemTag: Int?
         case .hideAccountInNotifications:
             SGSimpleSettings.shared.hideAccountInNotifications = value
             SGSimpleSettings.shared.synchronizeShared()
+        case .keepViewOnceMedia:
+            SGSimpleSettings.shared.keepViewOnceMedia = value
         }
     }, updateSliderValue: { setting, value in
         switch (setting) {

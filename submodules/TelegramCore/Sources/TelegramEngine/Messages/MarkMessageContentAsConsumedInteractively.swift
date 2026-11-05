@@ -2,6 +2,7 @@ import Foundation
 import Postbox
 internal import TelegramApi
 import SwiftSignalKit
+import SGSimpleSettings
 
 func _internal_markMessageContentAsConsumedInteractively(postbox: Postbox, messageId: MessageId) -> Signal<Void, NoError> {
     return postbox.transaction { transaction -> Void in
@@ -9,9 +10,34 @@ func _internal_markMessageContentAsConsumedInteractively(postbox: Postbox, messa
             var updateMessage = false
             var updatedAttributes = message.attributes
             
+            // Swiftgram: when "keepViewOnceMedia" is enabled, don't mark one-time media as
+            // consumed and don't start its self-destruct countdown: the peer is not
+            // notified of the view and the content remains viewable.
+            let keepViewOnceMedia = SGSimpleSettings.shared.keepViewOnceMedia
+            var skipViewOnceForMessage = false
+            if keepViewOnceMedia {
+                attributeLoop: for attribute in message.attributes {
+                    if let attribute = attribute as? ConsumableContentMessageAttribute {
+                        if !attribute.consumed {
+                            skipViewOnceForMessage = true
+                            break attributeLoop
+                        }
+                    } else if let attribute = attribute as? AutoremoveTimeoutMessageAttribute, attribute.timeout == viewOnceTimeout, attribute.countdownBeginTime == nil || attribute.countdownBeginTime == 0 {
+                        skipViewOnceForMessage = true
+                        break attributeLoop
+                    } else if let attribute = attribute as? AutoclearTimeoutMessageAttribute, attribute.timeout == viewOnceTimeout, attribute.countdownBeginTime == nil || attribute.countdownBeginTime == 0 {
+                        skipViewOnceForMessage = true
+                        break attributeLoop
+                    }
+                }
+            }
+            
             for i in 0 ..< updatedAttributes.count {
                 if let attribute = updatedAttributes[i] as? ConsumableContentMessageAttribute {
                     if !attribute.consumed {
+                        if skipViewOnceForMessage {
+                            continue
+                        }
                         updatedAttributes[i] = ConsumableContentMessageAttribute(consumed: true)
                         updateMessage = true
                         
@@ -49,6 +75,9 @@ func _internal_markMessageContentAsConsumedInteractively(postbox: Postbox, messa
             
             let timestamp = Int32(CFAbsoluteTimeGetCurrent() + NSTimeIntervalSince1970)
             for i in 0 ..< updatedAttributes.count {
+                if skipViewOnceForMessage, updatedAttributes[i] is AutoremoveTimeoutMessageAttribute || updatedAttributes[i] is AutoclearTimeoutMessageAttribute {
+                    continue
+                }
                 if let attribute = updatedAttributes[i] as? AutoremoveTimeoutMessageAttribute {
                     if attribute.countdownBeginTime == nil || attribute.countdownBeginTime == 0 {
                         var timeout = attribute.timeout
