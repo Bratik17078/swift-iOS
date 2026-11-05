@@ -1,12 +1,8 @@
 name: Build unsigned IPA
 
 on:
+  # Manual start only: Actions tab -> "Build unsigned IPA" -> Run workflow
   workflow_dispatch:
-
-  push:
-    branches:
-      - master
-      - sg-keep-view-once
 
 concurrency:
   group: build-${{ github.ref }}
@@ -15,7 +11,7 @@ concurrency:
 jobs:
   build:
     name: Build device IPA (unsigned, ad-hoc)
-    runs-on: macos-26
+    runs-on: macos-15
     timeout-minutes: 350
 
     steps:
@@ -87,6 +83,7 @@ jobs:
           python3 -u build-system/Make/Make.py \
             --bazelUserRoot="$BAZEL_USER_ROOT" \
             build \
+            --overrideXcodeVersion \
             --configurationPath="build-system/appstore-configuration.json" \
             --codesigningInformationPath=build-system/fake-codesigning \
             --configuration=release_arm64 \
