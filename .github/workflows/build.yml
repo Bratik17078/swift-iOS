@@ -24,13 +24,20 @@ jobs:
       - name: Read required Xcode version
         run: |
           REQUIRED_XCODE_VERSION=$(cat versions.json | python3 -c 'import json,sys;obj=json.load(sys.stdin);print(obj["xcode"]);')
-          echo "Required Xcode: $REQUIRED_XCODE_VERSION"
+          echo "Repo requires Xcode: $REQUIRED_XCODE_VERSION"
           echo "REQUIRED_XCODE_VERSION=$REQUIRED_XCODE_VERSION" >> $GITHUB_ENV
 
-      - name: Install and select Xcode ${{ env.REQUIRED_XCODE_VERSION }}
-        uses: maxim-lobanov/setup-xcode@v1
-        with:
-          xcode-version: ${{ env.REQUIRED_XCODE_VERSION }}
+      - name: Select Xcode (falling back to newest preinstalled)
+        run: |
+          if [ -d "/Applications/Xcode_$REQUIRED_XCODE_VERSION.app" ]; then
+            sudo xcode-select -s "/Applications/Xcode_$REQUIRED_XCODE_VERSION.app/Contents/Developer"
+          else
+            echo "::warning::Xcode $REQUIRED_XCODE_VERSION is not preinstalled on this image — selecting the newest available one (Make.py runs with --overrideXcodeVersion)"
+            NEWEST=$(ls -d /Applications/Xcode_*.app | sort -V | tail -1)
+            echo "Selecting $NEWEST"
+            sudo xcode-select -s "$NEWEST/Contents/Developer"
+          fi
+          xcodebuild -version
 
       - name: Make sure the Metal toolchain is available
         run: |
