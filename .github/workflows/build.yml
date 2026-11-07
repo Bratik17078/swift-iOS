@@ -37,6 +37,7 @@ jobs:
             echo "Selecting $NEWEST"
             sudo xcode-select -s "$NEWEST/Contents/Developer"
           fi
+          xcode-select -p
           xcodebuild -version
 
       - name: Make sure the Metal toolchain is available
@@ -49,13 +50,18 @@ jobs:
           set -x
           df -h /
           SELECTED=$(xcode-select -p)
+          # normalize "/Applications/Xcode_26.3.0.app/Contents/Developer" -> "/Applications/Xcode_26.3.0.app"
+          KEEP="${SELECTED%/Contents/Developer}"
+          echo "Keeping: $KEEP"
           for x in /Applications/Xcode*.app; do
-            if [ "$x" != "$SELECTED" ]; then
+            if [ "$x" != "$KEEP" ]; then
               sudo rm -rf "$x"
             fi
           done
           sudo rm -rf "$HOME/Library/Android/sdk" /usr/local/lib/android 2>/dev/null || true
           sudo rm -rf /opt/homebrew/Caskroom 2>/dev/null || true
+          xcode-select -p
+          xcodebuild -version
           df -h /
 
       - name: Create canonical source directory
