@@ -27,42 +27,41 @@ jobs:
           echo "Repo requires Xcode: $REQUIRED_XCODE_VERSION"
           echo "REQUIRED_XCODE_VERSION=$REQUIRED_XCODE_VERSION" >> $GITHUB_ENV
 
-      - name: Select Xcode (falling back to newest preinstalled)
-        run: |
-          if [ -d "/Applications/Xcode_$REQUIRED_XCODE_VERSION.app" ]; then
-            sudo xcode-select -s "/Applications/Xcode_$REQUIRED_XCODE_VERSION.app/Contents/Developer"
-          else
-            echo "::warning::Xcode $REQUIRED_XCODE_VERSION is not preinstalled on this image — selecting the newest available one (Make.py runs with --overrideXcodeVersion)"
-            NEWEST=$(ls -d /Applications/Xcode_*.app | sort -V | tail -1)
-            echo "Selecting $NEWEST"
-            sudo xcode-select -s "$NEWEST/Contents/Developer"
-          fi
-          xcode-select -p
-          xcodebuild -version
-
-      - name: Make sure the Metal toolchain is available
-        run: |
-          xcrun metal --version || true
-          xcodebuild -downloadMetalToolchain >/tmp/metal.log 2>&1 || true
-
       - name: Free disk space
         run: |
           set -x
           df -h /
-          SELECTED=$(xcode-select -p)
-          # normalize "/Applications/Xcode_26.3.0.app/Contents/Developer" -> "/Applications/Xcode_26.3.0.app"
-          KEEP="${SELECTED%/Contents/Developer}"
+
+          # Exactly ONE Xcode survives: the version the repo pins, else the newest preinstalled.
+          if [ -d "/Applications/Xcode_$REQUIRED_XCODE_VERSION.app" ]; then
+            KEEP="/Applications/Xcode_$REQUIRED_XCODE_VERSION.app"
+          else
+            echo "::warning::Xcode $REQUIRED_XCODE_VERSION is not preinstalled — keeping the newest available one (Make.py runs with --overrideXcodeVersion)"
+            KEEP=$(ls -d /Applications/Xcode_*.app | sort -V | tail -1)
+          fi
           echo "Keeping: $KEEP"
+          echo "KEEP_XCODE_APP=$KEEP" >> $GITHUB_ENV
+
           for x in /Applications/Xcode*.app; do
             if [ "$x" != "$KEEP" ]; then
               sudo rm -rf "$x"
             fi
           done
+
           sudo rm -rf "$HOME/Library/Android/sdk" /usr/local/lib/android 2>/dev/null || true
           sudo rm -rf /opt/homebrew/Caskroom 2>/dev/null || true
+
+          # macOS sometimes silently falls back to CommandLineTools during Xcode deletions —
+          # re-select explicitly AFTER the cleanup and verify.
+          sudo xcode-select -s "$KEEP/Contents/Developer"
           xcode-select -p
           xcodebuild -version
           df -h /
+
+      - name: Make sure the Metal toolchain is available
+        run: |
+          xcrun metal --version || true
+          xcodebuild -downloadMetalToolchain >/tmp/metal.log 2>&1 || true
 
       - name: Create canonical source directory
         run: |
@@ -82,6 +81,10 @@ jobs:
           BAZEL_USER_ROOT="/private/var/tmp/_bazel_containerhost"
 
           cd $SOURCE_DIR
+
+          # Guard against macOS having reset the active developer directory since the cleanup step
+          sudo xcode-select -s "$KEEP_XCODE_APP/Contents/Developer"
+          xcodebuild -version
 
           BUILD_NUMBER_OFFSET="$(cat build_number_offset)"
 
